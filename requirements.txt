@@ -1,3 +1,5 @@
 numpy
 pennylane
 pennylane-lightning
+matplotlib
+SciencePlots

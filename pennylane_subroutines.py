@@ -2,7 +2,7 @@ import pennylane as qml
 from pennylane import numpy as np
 from tqdm import tqdm
 
-from coefficients.generate_coefficients import NCP_3_6, NCP_4_10
+from coefficients.generate_coefficients import NCP_3_6, NCP_4_10, NCP_5_18, PCP_5_16, PCP_6_26
 
 def fermion_chain_1d(n):
 
@@ -155,9 +155,21 @@ def basic_simulation(hamiltonian, time, n_steps, dev, n_wires,
         elif commutator_method == 'NCP_4_10':
             cs, _ = NCP_4_10()
             positive = False
+        elif commutator_method == 'PCP_5_16':
+            cs, _ = PCP_5_16()
+            positive = True
+        elif commutator_method == 'PCP_6_26':
+            cs, _ = PCP_6_26()
+            positive = True
+        elif commutator_method == 'PCP_4_12':
+            cs, _ = PCP_5_16()
+            positive = True
+        elif commutator_method == 'NCP_5_18':
+            cs, _ = NCP_5_18()
+            positive = False
 
         if method == 'Commutator':
-            for _ in range(n_steps): CommutatorEvolution(H0, H1, h, 1, cs, positive)
+            for _ in range(n_steps): CommutatorEvolution(H0, H1, h, coupling, cs, positive)
         elif method == 'LieTrotter':
             for _ in range(n_steps): LieTrotter(H0, H1, h, coupling, cs, positive)
         elif method == 'Strang':
@@ -168,7 +180,7 @@ def basic_simulation(hamiltonian, time, n_steps, dev, n_wires,
             raise ValueError('Method not recognized')
 
         return qml.state()
-    
+
     def call_approx_full(time, n_steps, init_weights, weights):
         state = call_approx(time, n_steps, init_weights, weights)
         return state
