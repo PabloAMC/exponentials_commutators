@@ -14,10 +14,10 @@ coupling = 1
 time_steps = 1/(2**np.array(range(1, 8)))
 n_steps = 1
 method = 'Commutator'
-#commutator_method = 'NCP_3_6'
+random_weights = True
 device = 'lightning.qubit'
 
-H0, H1 = fermion_chain_1d(modes)
+H0, H1 = fermion_chain_1d(modes, random_weights=random_weights)
 evaluate_commutators(H0, H1)
 hamiltonian = (qml.jordan_wigner(H0), qml.jordan_wigner(H1), coupling)
 n_wires = modes

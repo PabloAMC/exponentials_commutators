@@ -4,14 +4,27 @@ from tqdm import tqdm
 
 from coefficients.generate_coefficients import NCP_3_6, NCP_4_10, NCP_5_18, PCP_5_16, PCP_6_26
 
-def fermion_chain_1d(n):
+def fermion_chain_1d(n, random_weights = False):
+    r"""
+    Implements a 1D Fermi-Hubbard model with the splitting.
 
-    H0 = qml.FermiC(0) * qml.FermiA(1) + qml.FermiC(1) * qml.FermiA(0)
-    H1 = qml.FermiC(1) * qml.FermiA(2) + qml.FermiC(2) * qml.FermiA(1)
+    Arguments:
+    ---------
+    n: int
+        The number of sites
+    random_weights: bool
+        Whether to use random weights for the Hamiltonian 
+    """
+    def weights(random):
+        if random: return np.random.uniform(-1, 1)
+        else: return 1.
+
+    H0 = weights(random_weights) * (qml.FermiC(0) * qml.FermiA(1) + qml.FermiC(1) * qml.FermiA(0))
+    H1 = weights(random_weights) * (qml.FermiC(1) * qml.FermiA(2) + qml.FermiC(2) * qml.FermiA(1))
 
     for i in range(2, n-1, 2):
-        H0 += qml.FermiC(i) * qml.FermiA(i+1) + qml.FermiC(i+1) * qml.FermiA(i)
-        H1 += qml.FermiC((i+1)%n) * qml.FermiA((i+2)%n) + qml.FermiC((i+2)%n) * qml.FermiA((i+1)%n)
+        H0 += weights(random_weights) * (qml.FermiC(i) * qml.FermiA(i+1) + qml.FermiC(i+1) * qml.FermiA(i))
+        H1 += weights(random_weights) * (qml.FermiC((i+1)%n) * qml.FermiA((i+2)%n) + qml.FermiC((i+2)%n) * qml.FermiA((i+1)%n))
 
     return H0, H1
 
