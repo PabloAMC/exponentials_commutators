@@ -193,3 +193,27 @@ def basic_simulation(hamiltonian, time, n_steps, dev, n_wires,
                                                     - call_approx_full(time, 5*n_steps, init_weights, weights))
 
     return average_error
+
+def evaluate_commutators(H0, H1):
+    r"""Prints some commutators"""
+    print('H0:', qml.jordan_wigner(H0), '\n')
+    print('H1:', qml.jordan_wigner(H1), '\n')
+    CH0H1 = qml.commutator(qml.jordan_wigner(H0), qml.jordan_wigner(H1))
+    print('[H0, H1]:', CH0H1, '\n')
+    CH0H1H0 = qml.commutator(CH0H1, qml.jordan_wigner(H0))
+    print('[H0, [H0, H1]]:', CH0H1H0, '\n')
+    CH1H0H1 = qml.commutator(qml.jordan_wigner(H1), CH0H1)
+    print('[H1, [H0, H1]]:', CH1H0H1, '\n')
+    CH1H0H1H0 = qml.commutator(qml.jordan_wigner(H1), CH0H1H0)
+    print('[H1, [H0, [H0, H1]]]:', CH1H0H1H0, '\n')
+    CH0H1H0H1 = qml.commutator(qml.jordan_wigner(H0), CH1H0H1)
+    print('[H0, [H1, [H0, H1]]]:', CH0H1H0H1, '\n')
+    CH0H1H0H1H0 = qml.commutator(qml.jordan_wigner(H0), CH1H0H1H0)
+    print('[H0, [H1, [H0, [H0, H1]]]]:', CH0H1H0H1H0, '\n')
+    CH1H0H1H0H1 = qml.commutator(qml.jordan_wigner(H1), CH0H1H0H1)
+    print('[H1, [H0, [H1, [H0, H1]]]]:', CH1H0H1H0H1, '\n')
+    CH1H0H1H0H1H0 = qml.commutator(qml.jordan_wigner(H1), CH0H1H0H1H0)
+    print('[H1, [H0, [H1, [H0, [H0, H1]]]]]:', CH1H0H1H0H1H0, '\n')
+    CH0H1H0H1H0H1 = qml.commutator(qml.jordan_wigner(H0), CH1H0H1H0H1)
+    print('[H0, [H1, [H0, [H1, [H0, H1]]]]]:', CH0H1H0H1H0H1, '\n')
+

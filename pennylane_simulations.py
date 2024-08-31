@@ -2,7 +2,7 @@ import numpy as np
 import pennylane as qml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from pennylane_subroutines import basic_simulation, fermion_chain_1d
+from pennylane_subroutines import basic_simulation, evaluate_commutators, fermion_chain_1d
 
 import matplotlib.pyplot as plt
 import scienceplots
@@ -18,6 +18,7 @@ method = 'Commutator'
 device = 'lightning.qubit'
 
 H0, H1 = fermion_chain_1d(modes)
+evaluate_commutators(H0, H1)
 hamiltonian = (qml.jordan_wigner(H0), qml.jordan_wigner(H1), coupling)
 n_wires = modes
 dev = qml.device(device, wires=n_wires)
