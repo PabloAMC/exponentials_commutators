@@ -1,8 +1,29 @@
 import pennylane as qml
-from pennylane import numpy as np
+import numpy as np
 from tqdm import tqdm
+from scipy.linalg import logm
 
 from coefficients.generate_coefficients import NCP_3_6, NCP_4_10, NCP_5_18, PCP_5_16, PCP_6_26
+
+# You can choose from BoseHubbard, FermiHubbard, Heisenberg, Ising, check https://pennylane.ai/datasets/
+def load_hamiltonian(name = "Ising", periodicity="open", lattice="chain", layout="1x4"):
+
+    hamiltonians = qml.data.load("qspin", sysname=name, periodicity=periodicity, 
+                                lattice=lattice, layout=layout, attributes=["hamiltonians"])
+
+    return hamiltonians[0].hamiltonians[50]
+
+def split_hamiltonian(H):
+    H0 = 0*qml.Identity(0)
+    H1 = 0*qml.Identity(0)
+
+    for coeff, op in zip(H.coeffs, H.ops):
+        if 'X' in str(op.pauli_rep):
+            H0 = H0 + coeff * op
+        else:
+            H1 = H1 + coeff * op
+    return H0, H1
+
 
 def fermion_chain_1d(n, random_weights = False):
     r"""
@@ -28,13 +49,11 @@ def fermion_chain_1d(n, random_weights = False):
 
     return H0, H1
 
-H0, H1 = fermion_chain_1d(4)
-
 
 def LieTrotter_ff(H, h): 
-    qml.TrotterProduct(H, h)
-    #for coeff, op in zip(H.coeffs, H.ops):
-    #    qml.exp(-1j * h * coeff * op)
+    qml.exp(H, h, 1) #todo: change back to 
+    #qml.TrotterProduct(H, h)
+
 
 def CommutatorEvolution(H0, H1, h, coupling, cs, positive = True):
     r"""
@@ -122,9 +141,31 @@ def Suzuki4(H0, H1, h, coupling, cs, positive):
     Strang(H0, H1, uk*h, coupling, cs, positive)
 
 
+def get_coefficients(commutator_method):
+        if commutator_method == 'NCP_3_6':
+            cs, _ = NCP_3_6()
+            positive = False
+        elif commutator_method == 'NCP_4_10':
+            cs, _ = NCP_4_10()
+            positive = False
+        elif commutator_method == 'PCP_5_16':
+            cs, _ = PCP_5_16()
+            positive = True
+        elif commutator_method == 'PCP_6_26':
+            cs, _ = PCP_6_26()
+            positive = True
+        elif commutator_method == 'PCP_4_12':
+            cs, _ = PCP_5_16()
+            positive = True
+        elif commutator_method == 'NCP_5_18':
+            cs, _ = NCP_5_18()
+            positive = False
+        return cs,positive
+
 
 def basic_simulation(hamiltonian, time, n_steps, dev, n_wires,
-                    n_samples = 3, method = 'LieTrotter', commutator_method = 'NCP_3_6'):
+                    n_samples = 3, method = 'LieTrotter', commutator_method = 'NCP_3_6',
+                    approximate = True):
     r"""
     Implements Hamiltonian simulation.
 
@@ -146,6 +187,8 @@ def basic_simulation(hamiltonian, time, n_steps, dev, n_wires,
         The device to use for the simulation
     commutator_method: str
         The method to compute the commutator
+    approximate: bool
+        Whether to use the approximate method
 
     Returns:
     --------
@@ -162,24 +205,7 @@ def basic_simulation(hamiltonian, time, n_steps, dev, n_wires,
 
         H0, H1, coupling = hamiltonian[0], hamiltonian[1], hamiltonian[2]
 
-        if commutator_method == 'NCP_3_6':
-            cs, _ = NCP_3_6()
-            positive = False
-        elif commutator_method == 'NCP_4_10':
-            cs, _ = NCP_4_10()
-            positive = False
-        elif commutator_method == 'PCP_5_16':
-            cs, _ = PCP_5_16()
-            positive = True
-        elif commutator_method == 'PCP_6_26':
-            cs, _ = PCP_6_26()
-            positive = True
-        elif commutator_method == 'PCP_4_12':
-            cs, _ = PCP_5_16()
-            positive = True
-        elif commutator_method == 'NCP_5_18':
-            cs, _ = NCP_5_18()
-            positive = False
+        cs, positive = get_coefficients(commutator_method)
 
         if method == 'Commutator':
             for _ in range(n_steps): CommutatorEvolution(H0, H1, h, coupling, cs, positive)
@@ -194,16 +220,26 @@ def basic_simulation(hamiltonian, time, n_steps, dev, n_wires,
 
         return qml.state()
 
+    
     def call_approx_full(time, n_steps, init_weights, weights):
         state = call_approx(time, n_steps, init_weights, weights)
         return state
 
-    error = 0
-    for n in tqdm(range(n_samples), desc='Initial states attempted'):
-        init_weights = np.random.uniform(0, 2*np.pi, (n_wires,))
-        weights = np.random.uniform(0, 2*np.pi, (3, n_wires-1, 2))
-        average_error = n/(n+1)*error + 1/(n+1)*np.linalg.norm(call_approx_full(time, n_steps, init_weights, weights)
-                                                    - call_approx_full(time, 5*n_steps, init_weights, weights))
+    if approximate:
+        average_error = 0.
+        for n in tqdm(range(n_samples), desc='Initial states attempted'):
+            init_weights = np.random.uniform(0, 2*np.pi, (n_wires,))
+            weights = np.random.uniform(0, 2*np.pi, (3, n_wires-1, 2))
+            average_error = n/(n+1)*average_error + 1/(n+1)*np.linalg.norm(call_approx_full(time, n_steps, init_weights, weights)
+                                                        - call_approx_full(time, 5*n_steps, init_weights, weights))
+    else:
+        cs, positive = get_coefficients(commutator_method)
+        H0, H1, coupling = hamiltonian[0], hamiltonian[1], hamiltonian[2]
+        h = time / n_steps
+
+        app = logm(qml.matrix(CommutatorEvolution, wire_order=range(n_wires))(H0, H1, h, coupling, cs, positive))
+        ex = logm(qml.matrix(qml.exp(qml.commutator(H0, H1), (h*coupling)**2), wire_order=range(n_wires)))
+        average_error = np.linalg.norm(app - ex)
 
     return average_error
 
