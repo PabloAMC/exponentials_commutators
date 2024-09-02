@@ -45,7 +45,8 @@ for commutator_method in tqdm(['NCP_3_6', 'NCP_4_10', 'PCP_5_16', 'PCP_6_26', 'P
 # Plot the results
 ax, fig = plt.subplots()
 for method in method_errors.keys():
-    plt.plot(time_steps, method_errors[method], '-o')
+    text, supr, sub = method.split('_')
+    plt.plot(time_steps, method_errors[method], '-o', label = f"{text}$_{{{sub}}}^{{[{supr}]}}$")
 
 plt.yscale('log')
 plt.xscale('log')
@@ -53,6 +54,6 @@ plt.xscale('log')
 plt.xlabel('Time step')
 plt.ylabel('Error')
 
-plt.legend(method_errors.keys())
+plt.legend(fontsize='small')
 
 plt.savefig('method_errors.pdf', bbox_inches='tight', format='pdf')
