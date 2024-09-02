@@ -11,7 +11,7 @@ def load_hamiltonian(name = "Ising", periodicity="open", lattice="chain", layout
     hamiltonians = qml.data.load("qspin", sysname=name, periodicity=periodicity, 
                                 lattice=lattice, layout=layout, attributes=["hamiltonians"])
 
-    return hamiltonians[0].hamiltonians[50]
+    return hamiltonians[0].hamiltonians[50], eval(layout.replace('x', '*'))
 
 def split_hamiltonian(H):
     H0 = 0*qml.Identity(0)
@@ -51,8 +51,8 @@ def fermion_chain_1d(n, random_weights = False):
 
 
 def LieTrotter_ff(H, h): 
-    qml.exp(H, h, 1) #todo: change back to 
-    #qml.TrotterProduct(H, h)
+    #qml.exp(H, h)
+    qml.TrotterProduct(H, h)
 
 
 def CommutatorEvolution(H0, H1, h, coupling, cs, positive = True):
@@ -208,7 +208,7 @@ def basic_simulation(hamiltonian, time, n_steps, dev, n_wires,
         cs, positive = get_coefficients(commutator_method)
 
         if method == 'Commutator':
-            for _ in range(n_steps): CommutatorEvolution(H0, H1, h, coupling, cs, positive)
+            for _ in range(n_steps**2): CommutatorEvolution(H0, H1, h, coupling, cs, positive)
         elif method == 'LieTrotter':
             for _ in range(n_steps): LieTrotter(H0, H1, h, coupling, cs, positive)
         elif method == 'Strang':
@@ -231,7 +231,7 @@ def basic_simulation(hamiltonian, time, n_steps, dev, n_wires,
             init_weights = np.random.uniform(0, 2*np.pi, (n_wires,))
             weights = np.random.uniform(0, 2*np.pi, (3, n_wires-1, 2))
             average_error = n/(n+1)*average_error + 1/(n+1)*np.linalg.norm(call_approx_full(time, n_steps, init_weights, weights)
-                                                        - call_approx_full(time, 5*n_steps, init_weights, weights))
+                                                        - call_approx_full(time, 2*n_steps, init_weights, weights))
     else:
         cs, positive = get_coefficients(commutator_method)
         H0, H1, coupling = hamiltonian[0], hamiltonian[1], hamiltonian[2]
