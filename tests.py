@@ -2,7 +2,7 @@ import numpy as np
 import pennylane as qml
 
 from coefficients.generate_coefficients import NCP_3_6, NCP_4_10
-from pennylane_subroutines import LieTrotter, LieTrotter_ff, CommutatorEvolution, fermion_chain_1d
+from pennylane_subroutines_commutator import LieTrotter, LieTrotter_ff, CommutatorEvolution, fermion_chain_1d
 
 def commutator_technique(commutator_method):
     if commutator_method == 'NCP_3_6':

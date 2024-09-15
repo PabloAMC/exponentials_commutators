@@ -1,4 +1,3 @@
-from functools import partial
 import pennylane as qml
 import numpy as np
 from tqdm import tqdm
@@ -56,19 +55,16 @@ def LieTrotter_ff(H, h):
     qml.TrotterProduct(H, h)
 
 
-def CommutatorEvolution(
-        simulateA, 
-        simulateB, 
-        h, cs, positive = True):
+def CommutatorEvolution(H0, H1, h, coupling, cs, positive = True):
     r"""
     Implements the evolution of the commutator term in the LieTrotter step.
 
     Arguments:
     ---------
-    simulateA: Callable(h)
-        The first Hamiltonian to simulate
-    simulateB: Callable(h)
-        The second Hamiltonian to simulate
+    H0: FermiSentence
+        The first (fast-forwardable) Hamiltonian
+    H1: FermiSentence
+        The second (fast-forwardable) Hamiltonian
     h: float
         The time step
     c: float
@@ -82,22 +78,22 @@ def CommutatorEvolution(
 
     cs_ = cs * (-1)**(int(positive) + 1)
     for c0, c1 in zip(cs_[::2], cs_[1::2]):
-        simulateA(h = h*c0)
-        simulateB(h = h*c1)
+        LieTrotter_ff(H0, h*coupling*c0)
+        LieTrotter_ff(H1, h*coupling*c1)
     if m%2 == 0: 
-        simulateA(h = h*cs_[-1])
+        LieTrotter_ff(H0, h*coupling*cs_[-1])
 
-    if m%2 == 0: simulateA, simulateB = simulateB, simulateA
+    if m%2 == 0: H0, H1 = H1, H0
 
     cs_ = cs[::-1]
     for c0, c1 in zip(cs_[::2], cs_[1::2]):
-        simulateA(h = h*c0)
-        simulateB(h = h*c1)
+        LieTrotter_ff(H0, h*coupling*c0)
+        LieTrotter_ff(H1, h*coupling*c1)
     if m%2 == 0: 
-        simulateA(h = h*cs_[-1])
+        LieTrotter_ff(H0, h*coupling*cs_[-1])
 
 
-def LieTrotter(H0, H1, h, cs, positive, reversed = False, 
+def LieTrotter(H0, H1, h, coupling, cs, positive, reversed = False, 
                commutator = False):
     r"""
     Simulates Lie Trotter step for the Hamiltonian H = hH0 + hH1 -i h*c[H0, H1]
@@ -121,56 +117,31 @@ def LieTrotter(H0, H1, h, cs, positive, reversed = False,
     --------
     None
     """
-    simulateA = partial(LieTrotter_ff, H=H0)
-    simulateB = partial(LieTrotter_ff, H=H1)
 
     if not reversed:
-        simulateA(h = h)
-        simulateB(h = h)
+        LieTrotter_ff(H0, h)
+        LieTrotter_ff(H1, h)
+        if commutator:
+            CommutatorEvolution(H0, H1, h, coupling, cs, positive)
     else:
-        simulateB(h = h)
-        simulateA(h = h)
+        if commutator:
+            CommutatorEvolution(H0, H1, h, coupling, cs, positive)
+        LieTrotter_ff(H1, h)
+        LieTrotter_ff(H0, h)
 
-def Strang(H0, H1, h, cs, positive):
-    LieTrotter(H0, H1, h/2, cs, positive)
-    LieTrotter(H1, H0, h/2, cs, positive)
+def Strang(H0, H1, h, coupling, cs, positive):
+    LieTrotter(H0, H1, h/2, coupling, cs, positive)
+    LieTrotter(H0, H1, h/2, coupling, cs, positive, reversed = True)
 
-
-def Yoshida4(H0, H1, h, cs, positive):
-    
-    uk = 1/(2-2**(1/3))
-
-    Strang(H0, H1, uk*h, cs, positive)
-    Strang(H0, H1, (1-2*uk)*h, cs, positive)
-    Strang(H0, H1, uk*h, cs, positive)
-
-def Suzuki4(H0, H1, h, cs, positive):
+def Suzuki4(H0, H1, h, coupling, cs, positive):
     
     uk = 1/(4-4**(1/3))
 
-    Strang(H0, H1, uk*h, cs, positive)
-    Strang(H0, H1, uk*h, cs, positive)
-    Strang(H0, H1, (1-4*uk)*h, cs, positive)
-    Strang(H0, H1, uk*h, cs, positive)
-    Strang(H0, H1, uk*h, cs, positive)
-
-def sym_Zassenhaus4(H0, H1, h, cs, positive):
-
-    simulateA = partial(LieTrotter_ff, H=H0)
-    simulateB = partial(LieTrotter_ff, H=H1)
-    simulateAB = partial(CommutatorEvolution, simulateA=simulateA, simulateB=simulateB,
-                        cs=cs, positive=positive)
-    simulateAAB = partial(CommutatorEvolution, simulateA=simulateA, simulateB=simulateAB,
-                        cs=cs, positive=positive)
-    simulateBAB = partial(CommutatorEvolution, simulateA=simulateB, simulateB=simulateAB,
-                        cs=cs, positive=positive)
-
-    LieTrotter(H0, H1, h/2, cs, positive)
-    simulateBAB(h = np.cbrt(h**3/24))
-    simulateAAB(h = np.cbrt(2*h**3/48))
-    simulateBAB(h = np.cbrt(h**3/24))
-    LieTrotter(H1, H0, h/2, cs, positive)
-    #todo: pass h or h^2 to simulateA and simulateB depending on the order of the commutator
+    Strang(H0, H1, uk*h, coupling, cs, positive)
+    Strang(H0, H1, uk*h, coupling, cs, positive)
+    Strang(H0, H1, (1-4*uk)*h, coupling, cs, positive)
+    Strang(H0, H1, uk*h, coupling, cs, positive)
+    Strang(H0, H1, uk*h, coupling, cs, positive)
 
 
 def get_coefficients(commutator_method):
@@ -195,7 +166,8 @@ def get_coefficients(commutator_method):
         return cs,positive
 
 
-def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
+
+def basic_simulation(hamiltonian, time, n_steps, dev, n_wires,
                     n_samples = 3, method = 'LieTrotter', commutator_method = 'NCP_3_6',
                     approximate = True):
     r"""
@@ -235,24 +207,18 @@ def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
         # Initial state preparation, using a 2-design
         qml.SimplifiedTwoDesign(initial_layer_weights=init_weights, weights=weights, wires=range(n_wires))
 
-        H0, H1 = hamiltonian[0], hamiltonian[1]
+        H0, H1, coupling = hamiltonian[0], hamiltonian[1], hamiltonian[2]
 
         cs, positive = get_coefficients(commutator_method)
 
         if method == 'Commutator':
-            simulateA = partial(LieTrotter_ff, H=H0)
-            simulateB = partial(LieTrotter_ff, H=H1)
-            for _ in range(n_steps**2): CommutatorEvolution(simulateA, simulateB, h, cs, positive)
+            for _ in range(n_steps**2): CommutatorEvolution(H0, H1, h, coupling, cs, positive)
         elif method == 'LieTrotter':
-            for _ in range(n_steps): LieTrotter(H0, H1, h, cs, positive)
+            for _ in range(n_steps): LieTrotter(H0, H1, h, coupling, cs, positive)
         elif method == 'Strang':
-            for _ in range(n_steps): Strang(H0, H1, h, cs, positive)
-        elif method == "Yoshida4":
-            for _ in range(n_steps): Yoshida4(H0, H1, h, cs, positive)
+            for _ in range(n_steps): Strang(H0, H1, h, coupling, cs, positive)
         elif method == 'Suzuki4':
-            for _ in range(n_steps): Suzuki4(H0, H1, h, cs, positive)
-        elif method == 'SymZassenhaus4':
-            for _ in range(n_steps): sym_Zassenhaus4(H0, H1, h, cs, positive)
+            for _ in range(n_steps): Suzuki4(H0, H1, h, coupling, cs, positive)
         else:
             raise ValueError('Method not recognized')
 
@@ -271,13 +237,12 @@ def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
             average_error = n/(n+1)*average_error + 1/(n+1)*np.linalg.norm(call_approx_full(time, n_steps, init_weights, weights)
                                                         - call_approx_full(time, 2*n_steps, init_weights, weights))
     else:
-        raise ValueError('Exact method not implemented')
         cs, positive = get_coefficients(commutator_method)
         H0, H1, coupling = hamiltonian[0], hamiltonian[1], hamiltonian[2]
         h = time / n_steps
 
-        app = logm(qml.matrix(CommutatorEvolution, wire_order=range(n_wires))(H0, H1, h, cs, positive))
-        ex = logm(qml.matrix(qml.exp(qml.commutator(H0, H1), h**2), wire_order=range(n_wires)))
+        app = logm(qml.matrix(CommutatorEvolution, wire_order=range(n_wires))(H0, H1, h, coupling, cs, positive))
+        ex = logm(qml.matrix(qml.exp(qml.commutator(H0, H1), (h*coupling)**2), wire_order=range(n_wires)))
         average_error = np.linalg.norm(app - ex)
 
     return average_error
