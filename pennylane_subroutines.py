@@ -57,8 +57,8 @@ def LieTrotter_ff(H, h):
 
 
 def CommutatorEvolution(
-        simulateA, 
-        simulateB, 
+        simulateA, h_power_A,
+        simulateB, h_power_B,
         h, cs, positive = True):
     r"""
     Implements the evolution of the commutator term in the LieTrotter step.
@@ -82,19 +82,46 @@ def CommutatorEvolution(
 
     cs_ = cs * (-1)**(int(positive) + 1)
     for c0, c1 in zip(cs_[::2], cs_[1::2]):
-        simulateA(h = h*c0)
-        simulateB(h = h*c1)
+        simulateA(h = c0*h)
+        simulateB(h = c1*h)
     if m%2 == 0: 
-        simulateA(h = h*cs_[-1])
+        simulateA(h = cs_[-1]*h)
 
-    if m%2 == 0: simulateA, simulateB = simulateB, simulateA
+    if m%2 == 0: 
+        simulateA, simulateB = simulateB, simulateA
 
     cs_ = cs[::-1]
     for c0, c1 in zip(cs_[::2], cs_[1::2]):
-        simulateA(h = h*c0)
-        simulateB(h = h*c1)
+        simulateA(h = c0*h)
+        simulateB(h = c1*h)
     if m%2 == 0: 
-        simulateA(h = h*cs_[-1])
+        simulateA(h = cs_[-1]*h)
+
+def DoubleCommutatorEvolution(
+        simulateA, simulateB, h
+):
+    r"""
+    Simulates [A, [A, B]] with O(h^4) precision.
+
+    Arguments:
+    ---------
+    simulateA: Callable(h)
+        The first Hamiltonian to simulate
+    simulateB: Callable(h)
+        The second Hamiltonian to simulate
+    h: float
+        The time step
+    cs: np.array
+        The coefficients of the nested commutator.
+    """
+    simulateB(h = -h)
+    simulateA(h = h)
+    simulateB(h = h)
+    simulateA(h = -h)
+    simulateB(h = -h)
+    simulateA(h = -h)
+    simulateB(h = h)
+    simulateA(h = h)
 
 
 def LieTrotter(H0, H1, h, cs, positive, reversed = False, 
@@ -158,20 +185,29 @@ def sym_Zassenhaus4(H0, H1, h, cs, positive):
 
     simulateA = partial(LieTrotter_ff, H=H0)
     simulateB = partial(LieTrotter_ff, H=H1)
-    simulateAB = partial(CommutatorEvolution, simulateA=simulateA, simulateB=simulateB,
-                        cs=cs, positive=positive)
-    simulateAAB = partial(CommutatorEvolution, simulateA=simulateA, simulateB=simulateAB,
-                        cs=cs, positive=positive)
-    simulateBAB = partial(CommutatorEvolution, simulateA=simulateB, simulateB=simulateAB,
-                        cs=cs, positive=positive)
+    #simulateAB = partial(CommutatorEvolution, simulateA=simulateA, h_power_A = 1,
+    #                    simulateB=simulateB, h_power_B = 1,
+    #                    cs=cs, positive=positive)
+    #simulateAAB = partial(CommutatorEvolution, simulateA=simulateA, h_power_A = 1,
+    #                    simulateB=simulateAB, h_power_B = 1/2,
+    #                    cs=cs, positive=positive)
+    #simulateBAB = partial(CommutatorEvolution, simulateA=simulateB, h_power_A = 1,
+    #                    simulateB=simulateAB, h_power_B = 1/2,
+    #                    cs=cs, positive=positive)
+    simulateABA = partial(DoubleCommutatorEvolution, simulateA=simulateA, 
+                        simulateB=simulateB, h=-h)
+    simulateBBA = partial(DoubleCommutatorEvolution, simulateA=simulateB,
+                        simulateB=simulateA, h=h)
 
-    LieTrotter(H0, H1, h/2, cs, positive)
-    simulateBAB(h = np.cbrt(h**3/24))
-    simulateAAB(h = np.cbrt(2*h**3/48))
-    simulateBAB(h = np.cbrt(h**3/24))
-    LieTrotter(H1, H0, h/2, cs, positive)
-    #todo: pass h or h^2 to simulateA and simulateB depending on the order of the commutator
-
+    #LieTrotter(H1, H0, h/2, cs, positive)
+    simulateB(h = h/2) # B = X
+    simulateA(h = h/2) # A = Y
+    simulateBBA(h = h/np.cbrt(24)) # 2*[X,[X,Y]]/(24*2)
+    simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/48
+    simulateBBA(h = h/np.cbrt(24)) # 2*[X,[X,Y]]/(24*2)
+    simulateA(h = h/2) # A = Y
+    simulateB(h = h/2) # B = X
+    #LieTrotter(H0, H1, h/2, cs, positive)
 
 def get_coefficients(commutator_method):
         if commutator_method == 'NCP_3_6':
