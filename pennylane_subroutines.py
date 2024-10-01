@@ -202,9 +202,9 @@ def sym_Zassenhaus4(H0, H1, h, cs, positive):
     #LieTrotter(H1, H0, h/2, cs, positive)
     simulateB(h = h/2) # B = X
     simulateA(h = h/2) # A = Y
-    simulateBBA(h = h/np.cbrt(24)) # 2*[X,[X,Y]]/(24*2)
-    simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/48
-    simulateBBA(h = h/np.cbrt(24)) # 2*[X,[X,Y]]/(24*2)
+    simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/(24*2)
+    simulateBBA(h = h/np.cbrt(24)) # 2*[X,[X,Y]]/48
+    simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/(24*2)
     simulateA(h = h/2) # A = Y
     simulateB(h = h/2) # B = X
     #LieTrotter(H0, H1, h/2, cs, positive)
@@ -306,15 +306,6 @@ def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
             weights = np.random.uniform(0, 2*np.pi, (3, n_wires-1, 2))
             average_error = n/(n+1)*average_error + 1/(n+1)*np.linalg.norm(call_approx_full(time, n_steps, init_weights, weights)
                                                         - call_approx_full(time, 2*n_steps, init_weights, weights))
-    else:
-        raise ValueError('Exact method not implemented')
-        cs, positive = get_coefficients(commutator_method)
-        H0, H1, coupling = hamiltonian[0], hamiltonian[1], hamiltonian[2]
-        h = time / n_steps
-
-        app = logm(qml.matrix(CommutatorEvolution, wire_order=range(n_wires))(H0, H1, h, cs, positive))
-        ex = logm(qml.matrix(qml.exp(qml.commutator(H0, H1), h**2), wire_order=range(n_wires)))
-        average_error = np.linalg.norm(app - ex)
 
     return average_error
 
