@@ -102,7 +102,7 @@ def CommutatorEvolution(
         simulateA(h = cs_[-1]*h)
 
 def DoubleCommutatorEvolution(
-        simulateA, simulateB, h
+        simulateA, simulateB, h, cs
 ):
     r"""
     Simulates [A, [A, B]] with O(h^4) precision.
@@ -118,14 +118,11 @@ def DoubleCommutatorEvolution(
     cs: np.array
         The coefficients of the nested commutator.
     """
-    simulateB(h = -h)
-    simulateA(h = h)
-    simulateB(h = h)
-    simulateA(h = -h)
-    simulateB(h = -h)
-    simulateA(h = -h)
-    simulateB(h = h)
-    simulateA(h = h)
+    for cB, cA in zip(cs[::2], cs[1::2]):
+        simulateB(h = cB*h)
+        simulateA(h = cA*h)
+    if len(cs)%2 != 0:
+        simulateB(h = cs[-1]*h)
 
 
 def LieTrotter(H0, H1, h, cs, positive, reversed = False, 
@@ -185,25 +182,17 @@ def Suzuki4(H0, H1, h, cs, positive):
     Strang(H0, H1, uk*h, cs, positive)
     Strang(H0, H1, uk*h, cs, positive)
 
-def sym_Zassenhaus4(H0, H1, h, cs, positive):
+def sym_Zassenhaus4(H0, H1, h):
+
+    cs = get_double_commutator_coefficients(order = 4)
 
     simulateA = partial(LieTrotter_ff, H=H0)
     simulateB = partial(LieTrotter_ff, H=H1)
-    #simulateAB = partial(CommutatorEvolution, simulateA=simulateA, h_power_A = 1,
-    #                    simulateB=simulateB, h_power_B = 1,
-    #                    cs=cs, positive=positive)
-    #simulateAAB = partial(CommutatorEvolution, simulateA=simulateA, h_power_A = 1,
-    #                    simulateB=simulateAB, h_power_B = 1/2,
-    #                    cs=cs, positive=positive)
-    #simulateBAB = partial(CommutatorEvolution, simulateA=simulateB, h_power_A = 1,
-    #                    simulateB=simulateAB, h_power_B = 1/2,
-    #                    cs=cs, positive=positive)
     simulateABA = partial(DoubleCommutatorEvolution, simulateA=simulateA, 
-                        simulateB=simulateB, h=-h)
+                        simulateB=simulateB, h=-h, cs=cs)
     simulateBBA = partial(DoubleCommutatorEvolution, simulateA=simulateB,
-                        simulateB=simulateA, h=h)
+                        simulateB=simulateA, h=h, cs=cs)
 
-    #LieTrotter(H1, H0, h/2, cs, positive)
     simulateB(h = h/2) # B = X
     simulateA(h = h/2) # A = Y
     simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/(24*2)
@@ -211,7 +200,6 @@ def sym_Zassenhaus4(H0, H1, h, cs, positive):
     simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/(24*2)
     simulateA(h = h/2) # A = Y
     simulateB(h = h/2) # B = X
-    #LieTrotter(H0, H1, h/2, cs, positive)
 
 def get_coefficients(commutator_method):
         if commutator_method == 'NCP_3_6':
@@ -234,9 +222,19 @@ def get_coefficients(commutator_method):
             positive = False
         return cs,positive
 
+def get_double_commutator_coefficients(order):
+    if order == 3:
+        return [-1, 1, 1, -1, -1, -1, 1, 1]
+    elif order == 4:
+        d2 = ((np.sqrt(1346)-36)/25)**(1/3)
+        d0, d1, d3, d4 = -d2/2, -1/np.sqrt(d2), +1/np.sqrt(d2), -d2
+        return [d0, d1, d2, d3, d4, d3, d2, d1, d0]
+    else:
+        raise ValueError('Order not recognized')
+
 
 def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
-                    n_samples = 3, method = 'LieTrotter', commutator_method = 'NCP_3_6',
+                    n_samples = 20, method = 'LieTrotter', commutator_method = 'NCP_3_6',
                     approximate = True):
     r"""
     Implements Hamiltonian simulation.
@@ -296,7 +294,12 @@ def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
         elif method == 'Suzuki4':
             for _ in range(n_steps): Suzuki4(H0, H1, h, cs, positive)
         elif method == 'SymZassenhaus4':
-            for _ in range(n_steps): sym_Zassenhaus4(H0, H1, h, cs, positive)
+            for _ in range(n_steps): sym_Zassenhaus4(H0, H1, h)
+        elif method == 'NestedCommutator':
+            cs = get_double_commutator_coefficients(order = 4)
+            simulateA = partial(LieTrotter_ff, H=H0)
+            simulateB = partial(LieTrotter_ff, H=H1)
+            for _ in range(n_steps**3): DoubleCommutatorEvolution(simulateA, simulateB, h, cs)
         else:
             raise ValueError('Method not recognized')
 

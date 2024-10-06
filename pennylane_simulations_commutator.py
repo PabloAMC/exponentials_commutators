@@ -15,21 +15,18 @@ n_steps = 1
 method = 'Commutator'
 random_weights = True
 device = 'default.qubit'
+layout = "1x8"
 
-H, n_wires = load_hamiltonian(layout="1x8")
-H0, H1 = split_hamiltonian(H)
-hamiltonian = (H0, H1, coupling)
+if layout == "1x1":
+    H0 = qml.Hamiltonian(coeffs = [1., 0.], observables = [qml.PauliX(0), qml.Identity(0)])
+    H1 = qml.Hamiltonian(coeffs = [1., 0.], observables = [qml.PauliZ(0), qml.Identity(0)])
+    n_wires = 1
+    hamiltonian = (H0, H1, 1.)
+else:
+    H, n_wires = load_hamiltonian(layout=layout)
+    H0, H1 = split_hamiltonian(H)
+    hamiltonian = (H0, H1, coupling)
 
-#H0 = qml.Hamiltonian(coeffs = [1j], observables=[qml.PauliX(0)])
-#H1 = qml.Hamiltonian(coeffs = [1j], observables=[qml.PauliZ(0)])
-# Can use iZ and iX, if so change the qml.TrotterProduct(H, h) step to qml.exp(H, h) in LieTrotter_ff from pennylane_subroutines.py
-
-# A manual alternative
-#modes = 7
-#H0, H1 = fermion_chain_1d(modes, random_weights=random_weights)
-#evaluate_commutators(H0, H1)
-#hamiltonian = (qml.jordan_wigner(H0), qml.jordan_wigner(H1), coupling)
-#n_wires = modes
 
 dev = qml.device(device, wires=n_wires)
 
@@ -40,10 +37,10 @@ for commutator_method in tqdm(['NCP_3_6', 'NCP_4_10', 'PCP_5_16', 'PCP_6_26', 'P
     method_resources[commutator_method] = []
     for time in time_steps:
         error, resources = time_simulation(hamiltonian, time, n_steps, dev, n_wires, 
-                                n_samples = 3, method = method, commutator_method = commutator_method,
+                                n_samples = 10, method = method, commutator_method = commutator_method,
                                 approximate = True)
         method_errors[commutator_method].append(error)
-        res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time
+        res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time**2
         method_resources[commutator_method].append(res)
 
 # Plot the results
@@ -60,7 +57,7 @@ plt.ylabel('Error')
 
 plt.legend(fontsize='small')
 
-plt.savefig('method_errors.pdf', bbox_inches='tight', format='pdf')
+plt.savefig(f'results/commutator_errors_{layout}.pdf', bbox_inches='tight', format='pdf')
 
 # Plot the resources
 ax, fig = plt.subplots()
@@ -75,4 +72,4 @@ plt.ylabel('Error')
 
 plt.legend(fontsize='small')
 
-plt.savefig('simulation_resources.pdf', bbox_inches='tight', format='pdf')
+plt.savefig(f'results/commutator_resources_{layout}.pdf', bbox_inches='tight', format='pdf')
