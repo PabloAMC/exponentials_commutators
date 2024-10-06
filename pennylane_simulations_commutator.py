@@ -40,7 +40,7 @@ for commutator_method in tqdm(['NCP_3_6', 'NCP_4_10', 'PCP_5_16', 'PCP_6_26', 'P
                                 n_samples = 10, method = method, commutator_method = commutator_method,
                                 approximate = True)
         method_errors[commutator_method].append(error)
-        res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time**2
+        res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time**2 # We get exp(t^2[commutator]) so to simulate exp([commutator]) we need to take 1/t^2 steps
         method_resources[commutator_method].append(res)
 
 # Plot the results
