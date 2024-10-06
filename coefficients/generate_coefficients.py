@@ -65,6 +65,21 @@ def NCP_5_18():
 
     return np.array([c0, c1, c2, c3, c4, c5, c6, c7, c8]), 0.395
 
+def AAB_4():
+    c2 = np.cbrt((np.sqrt(1346)-36)/25)
+    c0 = -c2/2
+    c1 = 1/np.sqrt(c2)
+    c3 = -1/np.sqrt(c2)
+    c4 = -c2
+    return np.array([c0, c1, c2, c3, c4]), None
+
+def S3_coeffs():
+    c = (np.sqrt(5)-1)/2
+    c0 = -(np.sqrt(5)+1)/2
+    c1 = (3-np.sqrt(5))/2
+    cs = [c, c, -1, c0, c1, 1]
+    return np.array(cs), None
+
 
 
 

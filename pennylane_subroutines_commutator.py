@@ -1,3 +1,4 @@
+from functools import partial
 import pennylane as qml
 import numpy as np
 from tqdm import tqdm
@@ -7,7 +8,7 @@ import copy
 gs = copy.copy(qml.resource.resource.StandardGateSet)
 gs.add('StatePrep')
 
-from coefficients.generate_coefficients import NCP_3_6, NCP_4_10, NCP_5_18, PCP_5_16, PCP_6_26
+from coefficients.generate_coefficients import NCP_3_6, NCP_4_10, NCP_5_18, PCP_5_16, PCP_6_26, S3_coeffs
 
 # You can choose from BoseHubbard, FermiHubbard, Heisenberg, Ising, check https://pennylane.ai/datasets/
 def load_hamiltonian(name = "Ising", periodicity="open", lattice="chain", layout="1x4"):
@@ -59,7 +60,7 @@ def LieTrotter_ff(H, h):
     qml.TrotterProduct(H, h)
 
 
-def CommutatorEvolution(H0, H1, h, coupling, cs, positive = True):
+def Commutator(H0, H1, h, cs, positive = True):
     r"""
     Implements the evolution of the commutator term in the LieTrotter step.
 
@@ -82,23 +83,182 @@ def CommutatorEvolution(H0, H1, h, coupling, cs, positive = True):
 
     cs_ = cs * (-1)**(int(positive) + 1)
     for c0, c1 in zip(cs_[::2], cs_[1::2]):
-        LieTrotter_ff(H0, h*coupling*c0)
-        LieTrotter_ff(H1, h*coupling*c1)
+        LieTrotter_ff(H0, h*c0)
+        LieTrotter_ff(H1, h*c1)
     if m%2 == 0: 
-        LieTrotter_ff(H0, h*coupling*cs_[-1])
+        LieTrotter_ff(H0, h*cs_[-1])
 
     if m%2 == 0: H0, H1 = H1, H0
 
     cs_ = cs[::-1]
     for c0, c1 in zip(cs_[::2], cs_[1::2]):
-        LieTrotter_ff(H0, h*coupling*c0)
-        LieTrotter_ff(H1, h*coupling*c1)
+        LieTrotter_ff(H0, h*c0)
+        LieTrotter_ff(H1, h*c1)
     if m%2 == 0: 
-        LieTrotter_ff(H0, h*coupling*cs_[-1])
+        LieTrotter_ff(H0, h*cs_[-1])
 
 
-def LieTrotter(H0, H1, h, coupling, cs, positive, reversed = False, 
-               commutator = False):
+def RecursiveCommutator(S, h, method, order):
+
+    #RC = lambda h: RecursiveCommutator(S, h, method, order-2)
+
+    if order%2 == 0: raise ValueError('The order must be odd')
+    if order == 3: S(h, adjoint = False)
+    elif order == 5:
+        if method == 'G4': G4(S, h, order-2)
+        elif method == 'G5': G5(S, h, order-2)
+        elif method == 'G6': G6(S, h, order-2)
+        elif method == 'G10': G10(S, h, order-2)
+        else: raise ValueError('Method not recognized')
+    else: raise ValueError('Order not implemented')
+
+
+def S3(h, adjoint, H0, H1, cs):
+    r"""
+    Implements the S3 formula
+
+    Arguments:
+    ---------
+    S: The O(n) step
+    h: The time step
+    cs: The coefficients
+    """
+
+
+    if not adjoint:
+        cs_ = np.array(cs[::-1])
+        for cB, cA in zip(cs_[::2], cs_[1::2]):
+            LieTrotter_ff(H1, h*cB)
+            LieTrotter_ff(H0, h*cA)
+    else:
+        cs_ = -1*np.array(cs)
+        for cA, cB in zip(cs_[::2], cs_[1::2]):
+            LieTrotter_ff(H0, h*cA)
+            LieTrotter_ff(H1, h*cB)
+
+
+def G6(S, h, n):
+    r"""
+    Implements the sqrt(6)-copy formula
+    
+    Arguments:
+    ---------
+    S: The O(n) step
+    h: The time step
+    n: The order
+    """
+    u = 1/np.sqrt(2-2**(2/(n+1)))
+    v = 2**(1/(n+1)) * u
+
+    S(h = -u*h/np.sqrt(2), adjoint = False)
+    S(h = -v*h/np.sqrt(2), adjoint = True)
+    S(h = -u*h/np.sqrt(2), adjoint = False)
+    S(h = u*h/np.sqrt(2), adjoint = False)
+    S(h = v*h/np.sqrt(2), adjoint = True)
+    S(h = u*h/np.sqrt(2), adjoint = False)
+
+
+def G10(S, h, n):
+    r"""
+    Implements the sqrt(10)-copy formula
+
+    Arguments:
+    ---------
+    S: The O(n) step
+    h: The time step
+    n: The order
+    """
+    sigma = 4**(2/(n+1))/(4*(4-4**(2/(n+1))))
+    mu = (4*sigma)**(1/2)
+    nu = (1/4 + sigma)**(1/2)
+
+    if n%2 == 1:
+        S(h = -nu*h/np.sqrt(2), adjoint = False)
+        S(h = -nu*h/np.sqrt(2), adjoint = False)
+        S(h = -mu*h/np.sqrt(2), adjoint = True)
+        S(h = -nu*h/np.sqrt(2), adjoint = False)
+        S(h = -nu*h/np.sqrt(2), adjoint = False)
+
+        S(h = nu*h/np.sqrt(2), adjoint = False)
+        S(h = nu*h/np.sqrt(2), adjoint = False)
+        S(h = mu*h/np.sqrt(2), adjoint = True)
+        S(h = nu*h/np.sqrt(2), adjoint = False)
+        S(h = nu*h/np.sqrt(2), adjoint = False)
+
+    else:
+        S(h = -nu*h/np.sqrt(2), adjoint = False)
+        S(h = +nu*h/np.sqrt(2), adjoint = False)
+
+        S(h = -nu*h/np.sqrt(2), adjoint = False)
+        S(h = +nu*h/np.sqrt(2), adjoint = False)
+
+        S(h = -mu*h/np.sqrt(2), adjoint = True)
+        S(h = +mu*h/np.sqrt(2), adjoint = True)
+
+        S(h = -nu*h/np.sqrt(2), adjoint = False)
+        S(h = +nu*h/np.sqrt(2), adjoint = False)
+
+        S(h = -nu*h/np.sqrt(2), adjoint = False)
+        S(h = +nu*h/np.sqrt(2), adjoint = False)
+
+
+def G5(S, h, n):
+    r"""
+    Implements the sqrt(5)-copy formula
+
+    Arguments:
+    ---------
+    S: The O(n) step
+    h: The time step
+    n: The order
+    """
+    s = (2/(1+2**(1/(n+2))))**(1/(n+1))
+    sp = 2**(-1/(n+2))*s
+
+    S(h = -sp*h, adjoint = False)
+    S(h = -h, adjoint = True)
+    S(h = s*h, adjoint = False)
+    S(h = +h, adjoint = True)
+    S(h = -sp*h, adjoint = False)
+
+def G4(S, h, n):
+    r"""
+    Implements the sqrt(4)-copy formula
+
+    Arguments:
+    ---------
+    S: The O(n) step
+    h: The time step
+    n: The order
+    """
+
+    a = 1
+    b = 2
+    if n == 3:
+        c = 1.982590733
+        d = -0.8190978288
+    elif n == 5:
+        c = 1.996950166
+        d = -0.8642318466
+    elif n == 7:
+        c = 1.999411381
+        d = -0.8911860667
+    elif n == 9:
+        c = 1.999880034
+        d = -0.9091844711
+    elif n == 11:
+        c = 1.999974677
+        d = -0.9220693131
+
+    s = np.sqrt(np.abs(a**2 - b**2 + c**2 - d**2))
+
+    S(h = d/s*h, adjoint = True)
+    S(h = c/s*h, adjoint = False)
+    S(h = b/s*h, adjoint = True)
+    S(h = a/s*h, adjoint = False)
+
+
+def LieTrotter(H0, H1, h):
     r"""
     Simulates Lie Trotter step for the Hamiltonian H = hH0 + hH1 -i h*c[H0, H1]
 
@@ -110,42 +270,28 @@ def LieTrotter(H0, H1, h, coupling, cs, positive, reversed = False,
         The second (fast-forwardable) Hamiltonian
     h: float
         The time step
-    c: float
-        The coupling strength of the interaction term
-    commutator_method: str
-        The method to compute the commutator.
-    reversed: bool
-        Whether to reverse the order of the terms in the Hamiltonian
 
     Returns:
     --------
     None
     """
+    LieTrotter_ff(H0, h)
+    LieTrotter_ff(H1, h)
 
-    if not reversed:
-        LieTrotter_ff(H0, h)
-        LieTrotter_ff(H1, h)
-        if commutator:
-            CommutatorEvolution(H0, H1, h, coupling, cs, positive)
-    else:
-        if commutator:
-            CommutatorEvolution(H0, H1, h, coupling, cs, positive)
-        LieTrotter_ff(H1, h)
-        LieTrotter_ff(H0, h)
 
-def Strang(H0, H1, h, coupling, cs, positive):
-    LieTrotter(H0, H1, h/2, coupling, cs, positive)
-    LieTrotter(H0, H1, h/2, coupling, cs, positive, reversed = True)
+def Strang(H0, H1, h):
+    LieTrotter(H0, H1, h/2)
+    LieTrotter(H1, H0, h/2)
 
-def Suzuki4(H0, H1, h, coupling, cs, positive):
+def Suzuki4(H0, H1, h):
     
     uk = 1/(4-4**(1/3))
 
-    Strang(H0, H1, uk*h, coupling, cs, positive)
-    Strang(H0, H1, uk*h, coupling, cs, positive)
-    Strang(H0, H1, (1-4*uk)*h, coupling, cs, positive)
-    Strang(H0, H1, uk*h, coupling, cs, positive)
-    Strang(H0, H1, uk*h, coupling, cs, positive)
+    Strang(H0, H1, uk*h)
+    Strang(H0, H1, uk*h)
+    Strang(H0, H1, (1-4*uk)*h)
+    Strang(H0, H1, uk*h)
+    Strang(H0, H1, uk*h)
 
 
 def get_coefficients(commutator_method):
@@ -215,18 +361,22 @@ def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
         # Initial state preparation, using a 2-design
         qml.StatePrep(init_state, wires=range(n_wires))
 
-        H0, H1, coupling = hamiltonian[0], hamiltonian[1], hamiltonian[2]
-
-        cs, positive = get_coefficients(commutator_method)
+        H0, H1, _ = hamiltonian[0], hamiltonian[1], hamiltonian[2]
 
         if method == 'Commutator':
-            for _ in range(n_steps**2): CommutatorEvolution(H0, H1, h, coupling, cs, positive)
+            cs, positive = get_coefficients(commutator_method)
+            for _ in range(n_steps**2): Commutator(H0, H1, h, cs, positive)
+        elif method == 'RecursiveCommutator':
+            cs, _ = S3_coeffs()
+            S = partial(S3, H0 = H0, H1 = H1, cs = cs)
+            cm, order = commutator_method.split('_')[0], int(commutator_method.split('_')[1])
+            for _ in range(n_steps**2): RecursiveCommutator(S, h, cm, order)
         elif method == 'LieTrotter':
-            for _ in range(n_steps): LieTrotter(H0, H1, h, coupling, cs, positive)
+            for _ in range(n_steps): LieTrotter(H0, H1, h)
         elif method == 'Strang':
-            for _ in range(n_steps): Strang(H0, H1, h, coupling, cs, positive)
+            for _ in range(n_steps): Strang(H0, H1, h)
         elif method == 'Suzuki4':
-            for _ in range(n_steps): Suzuki4(H0, H1, h, coupling, cs, positive)
+            for _ in range(n_steps): Suzuki4(H0, H1, h)
         else:
             raise ValueError('Method not recognized')
 
@@ -252,9 +402,10 @@ def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
         H0, H1, coupling = hamiltonian[0], hamiltonian[1], hamiltonian[2]
         h = time / n_steps
 
-        app = logm(qml.matrix(CommutatorEvolution, wire_order=range(n_wires))(H0, H1, h, coupling, cs, positive))
+        app = logm(qml.matrix(Commutator, wire_order=range(n_wires))(H0, H1, h, coupling, cs, positive))
         ex = logm(qml.matrix(qml.exp(qml.commutator(H0, H1), (h*coupling)**2), wire_order=range(n_wires)))
         average_error = np.linalg.norm(app - ex)
+        resources = 1
 
     return average_error, resources
 

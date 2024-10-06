@@ -16,27 +16,32 @@ random_weights = True
 device = 'default.qubit'
 commutator_method = 'PCP_6_26'
 
-#H, n_wires = load_hamiltonian(layout="1x4")
-#H0, H1 = split_hamiltonian(H)
-H0 = qml.Hamiltonian(coeffs = [1., 0.], observables = [qml.PauliX(0), qml.Identity(0)])
-H1 = qml.Hamiltonian(coeffs = [1., 0.], observables = [qml.PauliZ(0), qml.Identity(0)])
-n_wires = 1
-hamiltonian = (H0, H1)
+layout = "1x1"
+
+if layout == "1x1":
+    H0 = qml.Hamiltonian(coeffs = [1., 0.], observables = [qml.PauliX(0), qml.Identity(0)])
+    H1 = qml.Hamiltonian(coeffs = [1., 0.], observables = [qml.PauliZ(0), qml.Identity(0)])
+    n_wires = 1
+    hamiltonian = (H0, H1, 1.)
+else:
+    H, n_wires = load_hamiltonian(layout=layout)
+    H0, H1 = split_hamiltonian(H)
+    hamiltonian = (H0, H1, 1)
 
 dev = qml.device(device, wires=n_wires)
 
 method_errors={}
 method_resources = {}
-for method in tqdm(['SymZassenhaus4', 'Suzuki4', 'Yoshida4'], desc='Methods'): # 'NestedCommutator']) 
+for method in tqdm(['SymZassenhaus4']):#, 'Suzuki4', 'Yoshida4'], desc='Methods'): # 'NestedCommutator']) 
     method_errors[method] = []
     method_resources[method] = []
     for time in time_steps:
         error, resources = time_simulation(hamiltonian, time, n_steps, dev, n_wires, 
-                                n_samples = 20, method = method, commutator_method = commutator_method,
+                                n_samples = 10, method = method, commutator_method = commutator_method,
                                 approximate = True)
         method_errors[method].append(error)
-        res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time
-        method_resources[method].append(res)
+        #res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time
+        method_resources[method].append(0.)
 
     # Fit exponent to the error method_errors[method] = a * time_steps**b
     b, a = np.polyfit(np.log(time_steps), np.log(method_errors[method]), 1)

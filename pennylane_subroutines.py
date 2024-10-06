@@ -61,8 +61,7 @@ def LieTrotter_ff(H, h):
 
 
 def CommutatorEvolution(
-        simulateA, h_power_A,
-        simulateB, h_power_B,
+        simulateA, simulateB,
         h, cs, positive = True):
     r"""
     Implements the evolution of the commutator term in the LieTrotter step.
@@ -75,8 +74,6 @@ def CommutatorEvolution(
         The second Hamiltonian to simulate
     h: float
         The time step
-    c: float
-        The coupling strength of the interaction term
     cs: np.array
         The coefficients of the commutator
     positive: bool
@@ -100,6 +97,125 @@ def CommutatorEvolution(
         simulateB(h = c1*h)
     if m%2 == 0: 
         simulateA(h = cs_[-1]*h)
+
+def G6(S, h, n):
+    r"""
+    Implements the sqrt(6)-copy formula
+    
+    Arguments:
+    ---------
+    S: The O(n) step
+    h: The time step
+    n: The order
+    """
+    u = 1/np.sqrt(2-2**(2/(n+1)))
+    v = 2**(1/(n+1)) * u
+
+    S(h = -u*h/np.sqrt(2))
+    qml.adjoint(S(h = -v*h/np.sqrt(2)))
+    S(h = -u*h/np.sqrt(2))
+    S(h = u*h/np.sqrt(2))
+    qml.adjoint(S(h = v*h/np.sqrt(2)))
+    S(h = u*h/np.sqrt(2))
+
+
+def G10(S, h, n):
+    r"""
+    Implements the sqrt(10)-copy formula
+
+    Arguments:
+    ---------
+    S: The O(n) step
+    h: The time step
+    n: The order
+    """
+    sigma = 4**(2/(n+1))/(4*(4-4**(2/(n+1))))
+    mu = (4*sigma)**(1/2)
+    nu = (1/4 + sigma)**(1/2)
+
+    if n%2 == 1:
+        S(h = -nu*h/np.sqrt(2))
+        S(h = -nu*h/np.sqrt(2))
+        qml.adjoint(S(h = -mu*h/np.sqrt(2)))
+        S(h = -nu*h/np.sqrt(2))
+        S(h = -nu*h/np.sqrt(2))
+
+        S(h = nu*h/np.sqrt(2))
+        S(h = nu*h/np.sqrt(2))
+        qml.adjoint(S(h = mu*h/np.sqrt(2)))
+        S(h = nu*h/np.sqrt(2))
+        S(h = nu*h/np.sqrt(2))
+
+    else:
+        S(h = -nu*h/np.sqrt(2))
+        S(h = +nu*h/np.sqrt(2))
+
+        S(h = -nu*h/np.sqrt(2))
+        S(h = +nu*h/np.sqrt(2))
+
+        qml.adjoint(S(h = -mu*h/np.sqrt(2)))
+        qml.adjoint(S(h = +mu*h/np.sqrt(2)))
+
+        S(h = -nu*h/np.sqrt(2))
+        S(h = +nu*h/np.sqrt(2))
+
+        S(h = -nu*h/np.sqrt(2))
+        S(h = +nu*h/np.sqrt(2))
+
+
+def G5(S, h, n):
+    r"""
+    Implements the sqrt(5)-copy formula
+
+    Arguments:
+    ---------
+    S: The O(n) step
+    h: The time step
+    n: The order
+    """
+    s = (2/(1+2**(1/(n+2))))**(1/(n+1))
+    sp = 2**(-1/(n+2))*s
+
+    S(h = -sp*h)
+    qml.adjoint(S(h = -h))
+    S(h = s*h)
+    qml.adjoint(S(h = +h))
+    S(h = -sp*h)
+
+def G4(S, h, n):
+    r"""
+    Implements the sqrt(4)-copy formula
+
+    Arguments:
+    ---------
+    S: The O(n) step
+    h: The time step
+    n: The order
+    """
+
+    a = 1
+    b = 2
+    if n == 3:
+        c = 1.982590733
+        d = -0.8190978288
+    elif n == 5:
+        c = 1.996950166
+        d = -0.8642318466
+    elif n == 7:
+        c = 1.999411381
+        d = -0.8911860667
+    elif n == 9:
+        c = 1.999880034
+        d = -0.9091844711
+    elif n == 11:
+        c = 1.999974677
+        d = -0.9220693131
+
+    qml.adjoint(S(h = d*h))
+    S(h = c*h)
+    qml.adjoint(S(h = b*h))
+    S(h = a*h)
+
 
 def DoubleCommutatorEvolution(
         simulateA, simulateB, h, cs
@@ -195,9 +311,13 @@ def sym_Zassenhaus4(H0, H1, h):
 
     simulateB(h = h/2) # B = X
     simulateA(h = h/2) # A = Y
-    simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/(24*2)
-    simulateBBA(h = h/np.cbrt(24)) # 2*[X,[X,Y]]/48
-    simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/(24*2)
+    ABA = qml.commutator(H0, qml.commutator(H1, H0))
+    BBA = qml.commutator(H1, qml.commutator(H1, H0))
+    H = qml.Hamiltonian(coeffs = [1/24, 1/48], observables = [ABA, BBA])
+    qml.exp(H, coeff = 2*h**3)
+    #simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/(24*2)
+    #simulateBBA(h = h/np.cbrt(24)) # 2*[X,[X,Y]]/48
+    #simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/(24*2)
     simulateA(h = h/2) # A = Y
     simulateB(h = h/2) # B = X
 
@@ -307,7 +427,7 @@ def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
 
     
     def call_approx_full(time, n_steps, init_state):
-        resources = qml.resource.get_resources(circuit, gate_set = gs)(time, n_steps, init_state)
+        resources = None #qml.resource.get_resources(circuit, gate_set = gs)(time, n_steps, init_state)
         state = qml.QNode(circuit, dev)(time, n_steps, init_state)
         return state, resources
 
