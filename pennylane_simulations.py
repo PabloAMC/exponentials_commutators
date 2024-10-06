@@ -23,13 +23,17 @@ hamiltonian = (H0, H1)
 dev = qml.device(device, wires=n_wires)
 
 method_errors={}
+method_resources = {}
 for method in tqdm(['SymZassenhaus4', 'Suzuki4', 'Yoshida4'], desc='Methods'):
     method_errors[method] = []
+    method_resources[method] = []
     for time in time_steps:
-        error = time_simulation(hamiltonian, time, n_steps, dev, n_wires, 
+        error, resources = time_simulation(hamiltonian, time, n_steps, dev, n_wires, 
                                 n_samples = 3, method = method, commutator_method = commutator_method,
                                 approximate = True)
         method_errors[method].append(error)
+        res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time
+        method_resources[method].append(res)
 
 # Plot the results
 ax, fig = plt.subplots()
@@ -45,3 +49,18 @@ plt.ylabel('Error')
 plt.legend(fontsize='small')
 
 plt.savefig('simulation_errors.pdf', bbox_inches='tight', format='pdf')
+
+# Plot the resources
+ax, fig = plt.subplots()
+for method in method_resources.keys():
+    plt.plot(method_resources[method], method_errors[method], '-o', label = method)
+
+plt.yscale('log')
+plt.xscale('log')
+
+plt.xlabel('1 qubit rotation gates')
+plt.ylabel('Error')
+
+plt.legend(fontsize='small')
+
+plt.savefig('simulation_resources.pdf', bbox_inches='tight', format='pdf')

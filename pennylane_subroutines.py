@@ -4,6 +4,10 @@ import numpy as np
 from tqdm import tqdm
 from scipy.linalg import logm
 
+import copy
+gs = copy.copy(qml.resource.resource.StandardGateSet)
+gs.add('StatePrep')
+
 from coefficients.generate_coefficients import NCP_3_6, NCP_4_10, NCP_5_18, PCP_5_16, PCP_6_26
 
 # You can choose from BoseHubbard, FermiHubbard, Heisenberg, Ising, check https://pennylane.ai/datasets/
@@ -262,14 +266,18 @@ def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
     --------
     circuit
     """
-
     @qml.qnode(dev)
-    def call_approx(time, n_steps, init_weights, weights):
+    def initial_layer(init_weights, weights):
+        # Initial state preparation, using a 2-design
+        qml.SimplifiedTwoDesign(initial_layer_weights=init_weights, weights=weights, wires=range(n_wires))
+        return qml.state()
+
+    def circuit(time, n_steps, init_state):
 
         h = time / n_steps
 
         # Initial state preparation, using a 2-design
-        qml.SimplifiedTwoDesign(initial_layer_weights=init_weights, weights=weights, wires=range(n_wires))
+        qml.StatePrep(init_state, wires=range(n_wires))
 
         H0, H1 = hamiltonian[0], hamiltonian[1]
 
@@ -295,19 +303,22 @@ def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
         return qml.state()
 
     
-    def call_approx_full(time, n_steps, init_weights, weights):
-        state = call_approx(time, n_steps, init_weights, weights)
-        return state
+    def call_approx_full(time, n_steps, init_state):
+        resources = qml.resource.get_resources(circuit, gate_set = gs)(time, n_steps, init_state)
+        state = qml.QNode(circuit, dev)(time, n_steps, init_state)
+        return state, resources
 
     if approximate:
         average_error = 0.
         for n in tqdm(range(n_samples), desc='Initial states attempted'):
             init_weights = np.random.uniform(0, 2*np.pi, (n_wires,))
             weights = np.random.uniform(0, 2*np.pi, (3, n_wires-1, 2))
-            average_error = n/(n+1)*average_error + 1/(n+1)*np.linalg.norm(call_approx_full(time, n_steps, init_weights, weights)
-                                                        - call_approx_full(time, 2*n_steps, init_weights, weights))
-
-    return average_error
+            init_state = initial_layer(init_weights, weights)
+            st, resources = call_approx_full(time, n_steps, init_state)
+            st2, _ = call_approx_full(time, 2*n_steps, init_state)
+            average_error = n/(n+1)*average_error + 1/(n+1)*np.linalg.norm(st - st2)
+            
+    return average_error, resources
 
 def evaluate_commutators(H0, H1):
     r"""Prints some commutators"""

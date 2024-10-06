@@ -2,7 +2,7 @@ import numpy as np
 import pennylane as qml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from pennylane_subroutines_commutator import basic_simulation, evaluate_commutators, fermion_chain_1d, load_hamiltonian, split_hamiltonian
+from pennylane_subroutines_commutator import time_simulation, evaluate_commutators, fermion_chain_1d, load_hamiltonian, split_hamiltonian
 
 import matplotlib.pyplot as plt
 import scienceplots
@@ -34,19 +34,23 @@ hamiltonian = (H0, H1, coupling)
 dev = qml.device(device, wires=n_wires)
 
 method_errors={}
+method_resources = {}
 for commutator_method in tqdm(['NCP_3_6', 'NCP_4_10', 'PCP_5_16', 'PCP_6_26', 'PCP_4_12', 'NCP_5_18'], desc='Methods'):
     method_errors[commutator_method] = []
+    method_resources[commutator_method] = []
     for time in time_steps:
-        error = basic_simulation(hamiltonian, time, n_steps, dev, n_wires, 
+        error, resources = time_simulation(hamiltonian, time, n_steps, dev, n_wires, 
                                 n_samples = 3, method = method, commutator_method = commutator_method,
                                 approximate = True)
         method_errors[commutator_method].append(error)
+        res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time
+        method_resources[commutator_method].append(res)
 
 # Plot the results
 ax, fig = plt.subplots()
 for method in method_errors.keys():
     text, supr, sub = method.split('_')
-    plt.plot(time_steps, method_errors[method], '-o', label = f"{text}$_{{{sub}}}^{{[{supr}]}}$")
+    plt.plot(time_steps, method_errors[method], label = f"{text}$_{{{sub}}}^{{[{supr}]}}$")
 
 plt.yscale('log')
 plt.xscale('log')
@@ -57,3 +61,18 @@ plt.ylabel('Error')
 plt.legend(fontsize='small')
 
 plt.savefig('method_errors.pdf', bbox_inches='tight', format='pdf')
+
+# Plot the resources
+ax, fig = plt.subplots()
+for method in method_resources.keys():
+    plt.plot(method_resources[method], method_errors[method], label = method)
+
+plt.yscale('log')
+plt.xscale('log')
+
+plt.xlabel('1 qubit rotation gates')
+plt.ylabel('Error')
+
+plt.legend(fontsize='small')
+
+plt.savefig('simulation_resources.pdf', bbox_inches='tight', format='pdf')
