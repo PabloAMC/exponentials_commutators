@@ -32,7 +32,7 @@ dev = qml.device(device, wires=n_wires)
 
 method_errors={}
 method_resources = {}
-for method in tqdm(['SymZassenhaus4']):#, 'Suzuki4', 'Yoshida4'], desc='Methods'): # 'NestedCommutator']) 
+for method in tqdm(['SymZassenhaus4', 'Suzuki4', 'Yoshida4'], desc='Methods'): # 'NestedCommutator']) 
     method_errors[method] = []
     method_resources[method] = []
     for time in time_steps:
@@ -40,7 +40,7 @@ for method in tqdm(['SymZassenhaus4']):#, 'Suzuki4', 'Yoshida4'], desc='Methods'
                                 n_samples = 10, method = method, commutator_method = commutator_method,
                                 approximate = True)
         method_errors[method].append(error)
-        #res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time
+        res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time
         method_resources[method].append(0.)
 
     # Fit exponent to the error method_errors[method] = a * time_steps**b

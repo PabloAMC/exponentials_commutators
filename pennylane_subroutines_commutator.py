@@ -23,10 +23,11 @@ def split_hamiltonian(H):
     H1 = 0*qml.Identity(0)
 
     for coeff, op in zip(H.coeffs, H.ops):
+        # We will fix coeff to 1 for all cases.
         if 'X' in str(op.pauli_rep):
-            H0 = H0 + coeff * op
+            H0 = H0 + op
         else:
-            H1 = H1 + coeff * op
+            H1 = H1 + op
     return H0, H1
 
 

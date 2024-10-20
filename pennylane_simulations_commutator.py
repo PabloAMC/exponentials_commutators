@@ -13,7 +13,7 @@ coupling = 1
 time_steps = 1/(2**np.array(range(1, 8)))
 n_steps = 1
 random_weights = True
-device = 'default.qubit'
+device = 'lightning.qubit'
 layout = "1x8"
 
 if layout == "1x1":
@@ -68,9 +68,15 @@ for method in method_errors.keys():
         text, supr, sub = method.split('_')
         linestyle = 'solid'
     else:
-        text, sub = method.split('_')
-        text, supr = text[0], text[1:]
+        text, supr = method.split('_')
+        text, sub = text[0], text[1:]
         linestyle = 'dashed'
+        if str(text) == 'G' and int(supr) == 5:
+            if int(sub) == 4: text = 'Q'
+            elif int(sub) == 5: text = 'W'
+            elif int(sub) == 6: text = 'V'
+            elif int(sub) == 10: text = 'G'
+            sub = int(sub)*3
     plt.plot(time_steps, method_errors[method], label = f"{text}$_{{{sub}}}^{{[{supr}]}}$", linestyle = linestyle)
 
 plt.yscale('log')
@@ -90,15 +96,21 @@ for method in method_resources.keys():
         text, supr, sub = method.split('_')
         linestyle = 'solid'
     else:
-        text, sub = method.split('_')
-        text, supr = text[0], text[1:]
+        text, supr = method.split('_')
+        text, sub = text[0], text[1:]
         linestyle = 'dashed'
+        if str(text) == 'G' and int(supr) == 5:
+            if int(sub) == 4: text = 'Q'
+            elif int(sub) == 5: text = 'W'
+            elif int(sub) == 6: text = 'V'
+            elif int(sub) == 10: text = 'G'
+            sub = int(sub)*3
     plt.plot(method_resources[method], method_errors[method], label = f"{text}$_{{{sub}}}^{{[{supr}]}}$", linestyle = linestyle)
 
 plt.yscale('log')
 plt.xscale('log')
 
-plt.xlabel('1 qubit rotation gates')
+plt.xlabel('Cost, 1-qubit rotation gates')
 plt.ylabel('Error')
 
 plt.legend(fontsize='small', loc='center left', bbox_to_anchor=(1, 0.5))

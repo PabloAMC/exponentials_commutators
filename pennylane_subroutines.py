@@ -57,7 +57,7 @@ def fermion_chain_1d(n, random_weights = False):
 
 def LieTrotter_ff(H, h): 
     #qml.exp(H, h)
-    qml.TrotterProduct(H, h)
+    qml.TrotterProduct(H, time = h)
 
 
 def CommutatorEvolution(
@@ -218,19 +218,19 @@ def G4(S, h, n):
 
 
 def DoubleCommutatorEvolution(
-        simulateA, simulateB, h, cs
+        h, simulateA, simulateB, cs
 ):
     r"""
     Simulates [A, [A, B]] with O(h^4) precision.
 
     Arguments:
     ---------
+    h: float
+        The time step
     simulateA: Callable(h)
         The first Hamiltonian to simulate
     simulateB: Callable(h)
         The second Hamiltonian to simulate
-    h: float
-        The time step
     cs: np.array
         The coefficients of the nested commutator.
     """
@@ -302,24 +302,49 @@ def sym_Zassenhaus4(H0, H1, h):
 
     cs = get_double_commutator_coefficients(order = 4)
 
-    simulateA = partial(LieTrotter_ff, H=H0)
-    simulateB = partial(LieTrotter_ff, H=H1)
-    simulateABA = partial(DoubleCommutatorEvolution, simulateA=simulateA, 
-                        simulateB=simulateB, h=-h, cs=cs)
-    simulateBBA = partial(DoubleCommutatorEvolution, simulateA=simulateB,
-                        simulateB=simulateA, h=h, cs=cs)
+    simulateY = partial(LieTrotter_ff, H=H0)
+    simulateX = partial(LieTrotter_ff, H=H1)
 
-    simulateB(h = h/2) # B = X
-    simulateA(h = h/2) # A = Y
-    ABA = qml.commutator(H0, qml.commutator(H1, H0))
-    BBA = qml.commutator(H1, qml.commutator(H1, H0))
-    H = qml.Hamiltonian(coeffs = [1/24, 1/48], observables = [ABA, BBA])
-    qml.exp(H, coeff = 2*h**3)
-    #simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/(24*2)
-    #simulateBBA(h = h/np.cbrt(24)) # 2*[X,[X,Y]]/48
-    #simulateABA(h = h/np.cbrt(24)) # 2*[Y,[X,Y]]/(24*2)
-    simulateA(h = h/2) # A = Y
-    simulateB(h = h/2) # B = X
+    simulateYYX = partial(DoubleCommutatorEvolution, simulateA=simulateY, 
+                        simulateB=simulateX, cs=cs)
+    simulateXXY = partial(DoubleCommutatorEvolution, simulateA=simulateX,
+                        simulateB=simulateY, cs=cs)
+
+
+    # Zassenhaus 4th order (symmetrized): working
+    simulateX(h = h/2)
+    simulateY(h = h/2)
+    simulateYYX(h = -h/np.cbrt(24))
+    simulateXXY(h = h/np.cbrt(24))
+    simulateYYX(h = -h/np.cbrt(24))
+    simulateY(h = h/2)
+    simulateX(h = h/2)
+
+    '''  Zassenhaus 4th order (symmetrized): working
+    YXY = qml.commutator(H0, qml.commutator(H1, H0))
+    XXY = qml.commutator(H1, qml.commutator(H1, H0))
+    C3 = qml.Hamiltonian(coeffs = [1/24, 1/48], observables = [YXY, XXY])
+
+    qml.exp(H1, coeff = 1j*h/2)
+    qml.exp(H0, coeff = 1j*h/2)
+    qml.exp(C3, coeff = -2j*h**3)
+    qml.exp(H0, coeff = 1j*h/2)
+    qml.exp(H1, coeff = 1j*h/2)
+    '''
+
+    ''' Zassenhaus 4th order (non-symmetrized): working
+    C2 = qml.Hamiltonian(coeffs = [-1/2], observables = [qml.commutator(H1, H0)])
+
+    YXY = qml.commutator(H0, qml.commutator(H1, H0))
+    XXY = qml.commutator(H1, qml.commutator(H1, H0))
+    C3 = qml.Hamiltonian(coeffs = [1/3, 1/6], observables = [YXY, XXY])
+
+    qml.exp(C3, coeff = -1j*h**3)
+    qml.exp(C2, coeff = -h**2)
+    qml.exp(H0, coeff = 1j*h)
+    qml.exp(H1, coeff = 1j*h)
+    '''
+
 
 def get_coefficients(commutator_method):
         if commutator_method == 'NCP_3_6':
@@ -427,7 +452,7 @@ def time_simulation(hamiltonian, time, n_steps, dev, n_wires,
 
     
     def call_approx_full(time, n_steps, init_state):
-        resources = None #qml.resource.get_resources(circuit, gate_set = gs)(time, n_steps, init_state)
+        resources = qml.resource.get_resources(circuit, gate_set = gs)(time, n_steps, init_state)
         state = qml.QNode(circuit, dev)(time, n_steps, init_state)
         return state, resources
 
