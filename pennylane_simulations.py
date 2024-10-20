@@ -41,7 +41,7 @@ for method in tqdm(['SymZassenhaus4', 'Suzuki4', 'Yoshida4'], desc='Methods'): #
                                 approximate = True)
         method_errors[method].append(error)
         res = (resources.gate_types['RX'] + resources.gate_types['RZ'] + resources.gate_types['RY'])/time
-        method_resources[method].append(0.)
+        method_resources[method].append(res)
 
     # Fit exponent to the error method_errors[method] = a * time_steps**b
     b, a = np.polyfit(np.log(time_steps), np.log(method_errors[method]), 1)
